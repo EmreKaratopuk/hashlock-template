@@ -1,0 +1,80 @@
+{ parameter
+    (or (bytes %commit)
+        (pair %reveal (bytes %hashable) (lambda %message unit (list operation)))) ;
+  storage
+    (pair (pair (big_map %commits address (pair (timestamp %date) (bytes %salted_hash)))
+                (bytes %hashed))
+          (bool %unused)) ;
+  code { UNPAIR ;
+         IF_LEFT
+           { PUSH int 86400 ;
+             NOW ;
+             ADD ;
+             PAIR ;
+             DUP 2 ;
+             CAR ;
+             CAR ;
+             SWAP ;
+             SOME ;
+             SENDER ;
+             UPDATE ;
+             DUP 2 ;
+             DIG 2 ;
+             CAR ;
+             DIG 2 ;
+             UPDATE 1 ;
+             UPDATE 1 ;
+             NIL operation }
+           { DUP 2 ;
+             CDR ;
+             NOT ;
+             IF { PUSH string "This contract has already been used." ; FAILWITH } {} ;
+             DUP 2 ;
+             CAR ;
+             CAR ;
+             SENDER ;
+             GET ;
+             IF_NONE
+               { PUSH string "You have not made a commitment to hash against yet." ;
+                 FAILWITH }
+               {} ;
+             DUP ;
+             CAR ;
+             NOW ;
+             COMPARE ;
+             LT ;
+             IF { PUSH string "It has not been 24 hours since your commit yet." ; FAILWITH }
+                {} ;
+             SENDER ;
+             PACK ;
+             DUP 3 ;
+             CAR ;
+             CONCAT ;
+             SHA256 ;
+             SWAP ;
+             CDR ;
+             SWAP ;
+             COMPARE ;
+             NEQ ;
+             IF { PUSH string "This reveal does not match your commitment." ; FAILWITH }
+                {} ;
+             DUP ;
+             CAR ;
+             SHA256 ;
+             DUP 3 ;
+             CAR ;
+             CDR ;
+             COMPARE ;
+             NEQ ;
+             IF { PUSH string "Your commitment did not match the storage hash." ; FAILWITH }
+                {} ;
+             SWAP ;
+             PUSH bool False ;
+             UPDATE 2 ;
+             UNIT ;
+             DIG 2 ;
+             CDR ;
+             SWAP ;
+             EXEC } ;
+         PAIR } }
+

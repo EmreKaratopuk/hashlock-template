@@ -1,0 +1,46 @@
+archetype hashlock_contract
+
+variable unused: bool = true
+constant hashed: bytes = 0x
+// hashed is the hash of the solution
+
+asset commits identified by addr to big_map{
+    addr: address;
+    commit: date * bytes;  // commit: tuple(date, bytes)
+}
+
+// p = sha256(bytes(sender public address) + bytes(plaintext))
+entry commit_hash(p: bytes) {
+    effect {
+        var user_commit = (now + 1d, p); 
+        if commits.contains(caller) then
+            commits.update(caller, {commit=user_commit})
+        else
+            commits.add({addr=caller; commit=user_commit})
+    }
+}
+
+// p_hashable = bytes(plaintext),  
+entry reveal_hash(p_hashable: bytes, p_message: option<lambda<unit, option<list<operation>>>>){
+    require {
+        r1: unused otherwise "This contract has already been used.";
+        r2: commits.contains(caller) otherwise "You have not made a commitment to hash against yet.";
+    }
+    effect {
+        var user_commit = commits[caller].commit;
+        if now < user_commit[0] then fail("It has not been 24 hours since your commit yet.");
+        
+        var plaintext_user_commit: bytes = concat(p_hashable, pack(caller));
+        var salted: bytes = sha256(plaintext_user_commit);
+        if salted <> user_commit[1] then fail("This reveal does not match your commitment.");
+        if hashed <> sha256(p_hashable) then fail("Your commitment did not match the storage hash.");
+        unused := false; // := denotes assign
+        
+        // begin and end are used when there are multiple instructions
+        if is_some(p_message) then begin
+            // ?= denotes if variable is some, it assigns the value otherwise it fails
+            var func: lambda<unit, option<list<operation>>> ?= p_message;
+            var run: option<list<operation>> = exec_lambda(func, Unit)
+        end
+    }
+}
